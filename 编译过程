@@ -1,0 +1,212 @@
+
+一、编译过程 
+ 1、安装Scons文件。
+1）cmd切换到第三方scons包setup.py的目录下；
+2）执行python setup.py build；
+3）执行python setup.py install。
+ 2、编译boost_1_67文件。
+1）cmd到boost_1_67所在的文件夹，执行bootstrap.bat命令，主要生成b2.exe和bjam.exe文件；
+2）对应VS2017版，继续执行命令：b2 --toolset=msvc-14.1 threading=multi --build-type=complete stage
+ 3、下载mongo-cxx-driver文件。
+    1）打开GitHub桌面客户端，从git gui中点选clone new reposity，复制GitHub网页上存储mongo-cxx-driver文件的链接
+https://github.com/mongodb/mongo-cxx-driver.git。并在界面配置链接框和存放的下载文件夹的框（事先不需要创建）
+2）下载完成后，在GUI的菜单栏打开git bash，并在其中键入：git checkout legacy，生成结果表示成功验证。
+3）解压文件，生成mongo-cxx-driver文件夹。
+4、cmd到mongo-cxx-driver文件夹，键入如下命令生成驱动程序的include和lib文件：
+scons --64 --prefix="d:\mongo_drive" --cpppath="D:\boost_1_67_0" --libpath="D:\boost_1_67_0\stage\lib" install --dynamic-windows --sharedclient --dynamic-boost=off --dbg=on
+scons --64 --prefix="d:\mongo_drive" --cpppath="D:\boost_1_67_0" --libpath="D:\boost_1_67_0\stage\lib" install --dynamic-windows --sharedclient --dynamic-boost=off
+分别编译生成debug版（加--dbg=on）和release版
+   其中，--prefix表示生成的编译文件路径，--cpppath和--libpath分别对应boost库的目录和lib文件（因为需要boost库的支持才能编译成功）。
+    
+错误调试信息修改：
+1）File "D:\mongo_drive\mongo-cxx-driver-legacy\SConstruct", line 392
+    print( "python version: " + " ".join( [ `i` for i in sys.version_info ] ) )
+ 修改为：删除改句不重要的打印语句
+2）  File "D:\mongo_drive\mongo-cxx-driver-legacy\SConstruct", line 931
+    umask = os.umask(022)
+  修改为：umask = os.umask(0)
+3）  File "D:\mongo_drive\mongo-cxx-driver-legacy\SConstruct", line 1122
+    'CheckFlag' : lambda(ctx) : CheckFlagTest(ctx, tool, extension, flag)
+  修改为：'CheckFlag' : lambda ctx : CheckFlagTest(ctx, tool, extension, flag)
+    4）ModuleNotFoundError: No module named 'urllib2':
+  File "D:\mongo_drive\mongo-cxx-driver-legacy\SConstruct", line 16:
+import urllib2
+修改为：删除import urllib2
+5）OptionError: option --win-version-min: choices must be a list of strings ('dict_keys' supplied):
+  File "D:\mongo_drive\mongo-cxx-driver-legacy\SConstruct", line 263:
+    choices = win_version_min_choices.keys())
+修改为：choices = list(win_version_min_choices.keys()))
+6）  File "D:\mongo_drive\mongo-cxx-driver-legacy\src\SConscript.client", line 417
+    libEnv.AddPostAction(inst, Chmod('$TARGET', 0644))
+修改为：libEnv.AddPostAction(inst, Chmod('$TARGET', 0o700))
+7）File "D:\mongo_drive\mongo-cxx-driver-legacy\src\SConscript.client", line 6
+ModuleNotFoundError: No module named 'httplib':
+       修改为：import http.client
+    8）  File "src\mongo\base\generate_error_codes.py", line 120, in generate_header
+    error_code_class_predicate_declarations=predicate_declarations))
+TypeError: a bytes-like object is required, not 'str'
+错误原因：write必须以bytes-like对象形式写入，通过encode()函数转换
+源代码（118-120行）：
+    open(filename, 'wb').write(header_template % dict(
+            error_code_enum_declarations=enum_declarations,
+            error_code_class_predicate_declarations=predicate_declarations))
+修改为
+  header_temp = header_template % dict(error_code_enum_declarations=enum_declarations,error_code_class_predicate_declarations=predicate_declarations)
+    header_temp = header_temp.encode()
+    open(filename, 'wb').write(header_temp)
+    9）  File "src\mongo\base\generate_error_codes.py", line 137, in generate_source
+    error_code_class_predicate_definitions=predicate_definitions))
+TypeError: a bytes-like object is required, not 'str'
+错误原因：write必须以bytes-like对象形式写入，通过encode()函数转换
+源代码（133-137行）：
+    open(filename, 'wb').write(source_template % dict(
+            symbol_to_string_cases=symbol_to_string_cases,
+            string_to_symbol_cases=string_to_symbol_cases,
+            int_to_symbol_cases=int_to_symbol_cases,
+            error_code_class_predicate_definitions=predicate_definitions))
+修改为：
+    source_temp = source_template % dict(
+            symbol_to_string_cases=symbol_to_string_cases,
+            string_to_symbol_cases=string_to_symbol_cases,
+            int_to_symbol_cases=int_to_symbol_cases,
+            error_code_class_predicate_definitions=predicate_definitions)
+    source_temp = source_temp.encode()
+    open(filename, 'wb').write(source_temp)
+10）src\mongo\client\command_writer.cpp(68): 
+error C2039: “next”: 不是“boost”的成员
+             修改为：在src\mongo\client\dbclientinterface.h头文件中，加入
+#include <boost/next_prior.hpp>
+    11）如果出现file_time_to_microseconds未被定义的错误，可在
+boost/date_time/filetime_functions.hpp中添加如下代码：
+————————————————————————————————
+namespace winapi {
+#if !defined(BOOST_USE_WINDOWS_H)
+
+    extern "C" {
+
+        struct FILETIME
+        {
+            boost::uint32_t dwLowDateTime;
+            boost::uint32_t dwHighDateTime;
+        };
+        struct SYSTEMTIME
+        {
+            boost::uint16_t wYear;
+            boost::uint16_t wMonth;
+            boost::uint16_t wDayOfWeek;
+            boost::uint16_t wDay;
+            boost::uint16_t wHour;
+            boost::uint16_t wMinute;
+            boost::uint16_t wSecond;
+            boost::uint16_t wMilliseconds;
+        };
+
+        __declspec(dllimport) void __stdcall GetSystemTimeAsFileTime(FILETIME* lpFileTime);
+        __declspec(dllimport) int __stdcall FileTimeToLocalFileTime(const FILETIME* lpFileTime, FILETIME* lpLocalFileTime);
+        __declspec(dllimport) void __stdcall GetSystemTime(SYSTEMTIME* lpSystemTime);
+        __declspec(dllimport) int __stdcall SystemTimeToFileTime(const SYSTEMTIME* lpSystemTime, FILETIME* lpFileTime);
+
+    } // extern "C"
+
+#endif // defined(BOOST_USE_WINDOWS_H)
+
+    typedef FILETIME file_time;
+    typedef SYSTEMTIME system_time;
+
+    inline void get_system_time_as_file_time(file_time& ft)
+    {
+#if BOOST_WORKAROUND(__MWERKS__, BOOST_TESTED_AT(0x3205))
+        // Some runtime library implementations expect local times as the norm for ctime.
+        file_time ft_utc;
+        GetSystemTimeAsFileTime(&ft_utc);
+        FileTimeToLocalFileTime(&ft_utc, &ft);
+#elif defined(BOOST_HAS_GETSYSTEMTIMEASFILETIME)
+        GetSystemTimeAsFileTime(&ft);
+#else
+        system_time st;
+        GetSystemTime(&st);
+        SystemTimeToFileTime(&st, &ft);
+#endif
+    }
+
+    /*!
+     * The function converts file_time into number of microseconds elapsed since 1970-Jan-01
+     *
+     * \note Only dates after 1970-Jan-01 are supported. Dates before will be wrapped.
+     *
+     * \note The function is templated on the FILETIME type, so that
+     *       it can be used with both native FILETIME and the ad-hoc
+     *       boost::date_time::winapi::file_time type.
+     */
+    template< typename FileTimeT >
+    inline boost::uint64_t file_time_to_microseconds(FileTimeT const& ft)
+    {
+        /* shift is difference between 1970-Jan-01 & 1601-Jan-01
+        * in 100-nanosecond intervals */
+        const uint64_t shift = 116444736000000000ULL; // (27111902 << 32) + 3577643008
+
+        union {
+            FileTimeT as_file_time;
+            uint64_t as_integer; // 100-nanos since 1601-Jan-01
+        } caster;
+        caster.as_file_time = ft;
+
+        caster.as_integer -= shift; // filetime is now 100-nanos since 1970-Jan-01
+        return (caster.as_integer / 10); // truncate to microseconds
+    }
+} // namespace winapi
+————————————————————————————————
+
+12）其中出现错误提示warning LNK4049: 已导入本地定义的符号
+在编译命令scons参数串中，添加--dynamic-boost=off命令即可
+
+   编译完成，在--prefix对应的目录下生成MONGODB C++驱动程序对应的include和lib文件夹。
+
+二、代码测试过程：
+ 建立1个空的控制台应用工程test-2017，建立cpp程序，添加到工程目录中。
+1）配置包含目录,也就是生成boost_1_67_0的源码路径,和编译mongoDB驱动生成的include目录。以及库目录boost生成出来的stage\lib库目录和编译mongoDB驱动生成的lib目录
+
+2）在c/c++目录中，附加包含目录中，包含MONGODB驱动生成的include文件夹路径（如D:\mongo_drive\include），以及boost库所在的文件夹路径（如D:\boost_1_67_0）
+
+3）在链接器下，常规选项\附加库目录中，包含MONGODB驱动生成的lib文件夹路径（如D:\mongo_drive\lib），以及boost库的lib所在路径（如D:\boost_1_67_0\stage\lib）
+
+在输入\附加依赖项中，包含ws2_32.lib;mongoclient-gd.lib两个文件。
+
+4）添加测试代码如下：
+测试代码如下：
+————————————————————————————————
+#include <iostream>
+#include <iomanip>
+#include <cstdlib>
+#include <winsock2.h>
+#include "mongo\client\dbclient.h"
+
+using namespace std;
+
+void run(){
+	mongo::DBClientConnection con;
+	con.connect("10.0.40.20:27017");
+}
+
+int main(){
+	WSAData wsaData;
+	if (WSAStartup(MAKEWORD(1, 1), &wsaData) != 0){
+		return -1;
+	}
+
+	try{
+		run();
+		cout << "conn ok" << endl;
+	}
+	catch (const mongo::DBException &e){
+		cout << "caught" << e.what() << endl;
+	}
+	getchar();
+	return EXIT_SUCCESS;
+}
+——————————————————————————————————————————————
+编译通过...但运行时报找不到mongoclient-gd.dll将mongoclient-gd.dll文件拷贝到工程目录下：
+
+最后运行成功：
+
+
